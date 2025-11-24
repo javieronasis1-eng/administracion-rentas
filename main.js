@@ -195,6 +195,17 @@ function renderRentalSection(type, rentals, containerId) {
         const payment = rental.pagos[selectedMonth] || { pagado: false, fecha: null };
         const isPaid = payment.pagado === true;
 
+        // Create receipt button HTML explicitly
+        let receiptButtonHtml = '';
+        if (isPaid) {
+            receiptButtonHtml = `
+            <button class="btn btn-primary btn-block btn-small" 
+                    onclick="generateReceipt('${type}', ${rental.id}, '${selectedMonth}')" 
+                    style="margin-top: 0.5rem; background-color: var(--primary); color: white;">
+              📄 Imprimir Recibo
+            </button>`;
+        }
+
         return `
       <div class="rental-card ${!rental.ocupado ? 'desocupado' : ''}" data-type="${type}" data-id="${rental.id}">
         <div class="rental-header">
@@ -251,13 +262,7 @@ function renderRentalSection(type, rentals, containerId) {
           </button>
         </div>
 
-        ${isPaid ? `
-        <button class="btn btn-primary btn-block btn-small" 
-                onclick="generateReceipt('${type}', ${rental.id}, '${selectedMonth}')" 
-                style="margin-top: 0.5rem; background-color: var(--primary); color: white;">
-          📄 Imprimir Recibo
-        </button>
-        ` : ''}
+        ${receiptButtonHtml}
         
         <button class="btn btn-secondary btn-block btn-small" 
                 onclick="showHistory('${type}', ${rental.id})" 
