@@ -330,7 +330,38 @@ function showHistory(type, id) {
 
     const sortedMonths = Object.keys(rental.pagos).sort().reverse();
 
+    // Count paid and pending
+    let totalPagados = 0;
+    let totalPendientes = 0;
+    sortedMonths.forEach(monthKey => {
+        if (rental.pagos[monthKey].pagado) {
+            totalPagados++;
+        } else {
+            totalPendientes++;
+        }
+    });
+
     let html = `<h3 style="margin-bottom: 1rem;">${rental.inquilino}</h3>`;
+
+    // Add summary
+    if (sortedMonths.length > 0) {
+        html += `
+        <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; padding: 1rem; background: rgba(255,255,255,0.05); border-radius: 8px;">
+          <div style="flex: 1; text-align: center;">
+            <div style="font-size: 2rem; font-weight: bold; color: var(--success);">${totalPagados}</div>
+            <div style="color: var(--text-secondary); font-size: 0.875rem;">Pagados</div>
+          </div>
+          <div style="flex: 1; text-align: center;">
+            <div style="font-size: 2rem; font-weight: bold; color: var(--warning);">${totalPendientes}</div>
+            <div style="color: var(--text-secondary); font-size: 0.875rem;">Pendientes</div>
+          </div>
+          <div style="flex: 1; text-align: center;">
+            <div style="font-size: 2rem; font-weight: bold; color: var(--text-primary);">${sortedMonths.length}</div>
+            <div style="color: var(--text-secondary); font-size: 0.875rem;">Total Meses</div>
+          </div>
+        </div>
+        `;
+    }
 
     if (sortedMonths.length === 0) {
         html += '<p style="color: var(--text-secondary);">No hay historial de pagos registrado.</p>';
