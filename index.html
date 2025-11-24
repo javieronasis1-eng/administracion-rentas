@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ADMINISTRACION</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <!-- Header -->
+    <header class="header">
+        <h1>🏢 ADMINISTRACION</h1>
+        <p>Sistema de control de pagos y servicios</p>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <nav class="nav-tabs">
+        <button class="tab-btn active" data-tab="pagos">Control de Pagos</button>
+        <button class="tab-btn" data-tab="servicios">Agua y Servicios</button>
+    </nav>
+
+    <!-- Main Container -->
+    <div class="container">
+        <!-- Tab: Control de Pagos -->
+        <div id="tab-pagos" class="tab-content active">
+            <!-- Summary Cards -->
+            <div class="summary-section">
+                <div class="summary-card">
+                    <h3>Ingresos del Mes</h3>
+                    <div class="amount" id="ingreso-mes">$0</div>
+                </div>
+                <div class="summary-card">
+                    <h3>Total Esperado</h3>
+                    <div class="amount" id="total-esperado">$24,000</div>
+                </div>
+                <div class="summary-card">
+                    <h3>Pendientes</h3>
+                    <div class="amount" id="total-pendiente">$0</div>
+                </div>
+            </div>
+
+            <!-- Cuartos Section -->
+            <div class="rental-section">
+                <h2>Cuartos ($1,500/mes)</h2>
+                <div class="rental-grid" id="cuartos-grid"></div>
+            </div>
+
+            <!-- Departamentos Section -->
+            <div class="rental-section">
+                <h2>Departamentos ($4,500/mes)</h2>
+                <div class="rental-grid" id="departamentos-grid"></div>
+            </div>
+
+            <!-- Monthly Revenue History -->
+            <div class="rental-section">
+                <h2>📊 Recaudación Mensual</h2>
+                <div id="monthly-revenue-list"></div>
+            </div>
+        </div>
+
+        <!-- Tab: Agua y Servicios -->
+        <div id="tab-servicios" class="tab-content">
+            <!-- Summary for Services -->
+            <div class="summary-section">
+                <div class="summary-card">
+                    <h3>Total Agua</h3>
+                    <div class="amount" id="total-agua">$0</div>
+                </div>
+                <div class="summary-card">
+                    <h3>Total Servicios</h3>
+                    <div class="amount" id="total-servicios">$0</div>
+                </div>
+                <div class="summary-card">
+                    <h3>Total Gastos</h3>
+                    <div class="amount" id="total-gastos">$0</div>
+                </div>
+            </div>
+
+            <!-- Services Forms and Lists -->
+            <div class="services-section">
+                <!-- Water Form -->
+                <div class="service-form">
+                    <h3>💧 Registrar Llenado de Agua</h3>
+                    <form id="form-agua">
+                        <div class="input-group">
+                            <label for="agua-fecha">Fecha</label>
+                            <input type="date" id="agua-fecha" required>
+                        </div>
+                        <div class="input-group">
+                            <label for="agua-cantidad">Cantidad (litros)</label>
+                            <input type="number" id="agua-cantidad" placeholder="10000" required>
+                        </div>
+                        <div class="input-group">
+                            <label for="agua-costo">Costo ($)</label>
+                            <input type="number" id="agua-costo" placeholder="500" step="0.01" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-block">Agregar Registro</button>
+                    </form>
+                </div>
+
+                <!-- Other Services Form -->
+                <div class="service-form">
+                    <h3>⚡ Registrar Servicio</h3>
+                    <form id="form-servicio">
+                        <div class="input-group">
+                            <label for="servicio-tipo">Tipo de Servicio</label>
+                            <select id="servicio-tipo" required
+                                style="width: 100%; padding: 0.75rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); border-radius: var(--radius-sm); color: var(--text-primary); font-size: 0.9rem;">
+                                <option value="luz">Luz</option>
+                                <option value="internet">Internet</option>
+                                <option value="otros">Otros</option>
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <label for="servicio-fecha">Fecha</label>
+                            <input type="date" id="servicio-fecha" required>
+                        </div>
+                        <div class="input-group">
+                            <label for="servicio-costo">Costo ($)</label>
+                            <input type="number" id="servicio-costo" placeholder="800" step="0.01" required>
+                        </div>
+                        <div class="input-group">
+                            <label for="servicio-notas">Notas</label>
+                            <input type="text" id="servicio-notas" placeholder="Recibo del mes...">
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-block">Agregar Servicio</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Services Lists -->
+            <div class="services-list">
+                <h3>📋 Registros del Mes</h3>
+                <div id="servicios-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for Payment History -->
+    <div id="modal-historial" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Historial de Pagos</h2>
+                <button class="close-modal">&times;</button>
+            </div>
+            <div id="historial-content"></div>
+        </div>
+    </div>
+
+    <!-- Supabase Client Library -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <!-- Supabase Configuration -->
+    <script src="supabase-config.js"></script>
+
+    <!-- Supabase Sync Functions -->
+    <script src="supabase-sync.js"></script>
+
+    <!-- Main Application -->
+    <script src="main.js"></script>
+</body>
+
+</html>
