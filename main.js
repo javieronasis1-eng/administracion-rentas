@@ -10,8 +10,49 @@ let data = {
     }
 };
 
-// NOTE: initializeData() and saveData() are now in supabase-sync.js
-// We removed the local versions to use the cloud-sync versions
+// Initialize data (LOCAL ONLY)
+function initializeData() {
+    const savedData = localStorage.getItem('rentasData');
+
+    if (savedData) {
+        data = JSON.parse(savedData);
+        // Add ocupado field to existing data if it doesn't exist
+        data.cuartos.forEach(c => {
+            if (c.ocupado === undefined) c.ocupado = true;
+            // Ensure pagos object exists
+            if (!c.pagos) c.pagos = {};
+        });
+        data.departamentos.forEach(d => {
+            if (d.ocupado === undefined) d.ocupado = true;
+            if (!d.pagos) d.pagos = {};
+        });
+    } else {
+        // Create default data for 4 rooms and 4 apartments
+        for (let i = 1; i <= 4; i++) {
+            data.cuartos.push({
+                id: i,
+                inquilino: `Cuarto ${i}`,
+                renta: 1500,
+                ocupado: true,
+                pagos: {}
+            });
+
+            data.departamentos.push({
+                id: i,
+                inquilino: `Departamento ${i}`,
+                renta: 4500,
+                ocupado: true,
+                pagos: {}
+            });
+        }
+        saveData();
+    }
+}
+
+// Save data to localStorage (LOCAL ONLY)
+function saveData() {
+    localStorage.setItem('rentasData', JSON.stringify(data));
+}
 
 // Get current month key (YYYY-MM format)
 function getCurrentMonthKey() {
@@ -31,21 +72,21 @@ function getMonthName(monthKey) {
 function generateMonthOptions() {
     const options = [];
     const now = new Date();
-    
+
     // Generate options for last 6 months
     for (let i = 6; i >= 0; i--) {
         const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
         const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
         options.push({ key, name: getMonthName(key) });
     }
-    
+
     // Generate options for next 3 months
     for (let i = 1; i <= 3; i++) {
         const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
         const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
         options.push({ key, name: getMonthName(key) });
     }
-    
+
     return options;
 }
 
@@ -72,7 +113,7 @@ function renderRentals() {
 // Render monthly revenue history
 function renderMonthlyRevenue() {
     const container = document.getElementById('monthly-revenue-list');
-    
+
     // Get all unique months from payment history
     const monthsSet = new Set();
     [...data.cuartos, ...data.departamentos].forEach(rental => {
@@ -80,38 +121,38 @@ function renderMonthlyRevenue() {
             monthsSet.add(month);
         });
     });
-    
+
     // Sort months descending (most recent first)
     const months = Array.from(monthsSet).sort().reverse();
-    
+
     if (months.length === 0) {
         container.innerHTML = '<p style="color: var(--text-secondary); text-align: center;">No hay historial de recaudación aún.</p>';
         return;
     }
-    
+
     let html = '<div class="revenue-history-grid">';
-    
+
     months.forEach(monthKey => {
         const monthName = getMonthName(monthKey);
         let metaMes = 0;
         let recaudado = 0;
-        
+
         // Calculate meta and collected for this month
         [...data.cuartos, ...data.departamentos].forEach(rental => {
             // Note: We use current ocupado status as proxy
             if (rental.ocupado) {
                 metaMes += rental.renta;
             }
-            
+
             const payment = rental.pagos[monthKey];
             if (payment && payment.pagado) {
                 recaudado += rental.renta;
             }
         });
-        
+
         const pendiente = metaMes - recaudado;
         const porcentaje = metaMes > 0 ? ((recaudado / metaMes) * 100).toFixed(0) : 0;
-        
+
         html += `
         <div class="revenue-month-card">
           <div class="revenue-month-header">
@@ -138,7 +179,7 @@ function renderMonthlyRevenue() {
         </div>
         `;
     });
-    
+
     html += '</div>';
     container.innerHTML = html;
 }
@@ -229,27 +270,27 @@ function selectMonth(type, id, monthKey) {
 }
 
 // Update inquilino name
-async function updateInquilino(type, id, value) {
+function updateInquilino(type, id, value) {
     const rental = data[type].find(r => r.id === id);
     if (rental) {
         rental.inquilino = value;
-        await saveData();
+        saveData();
         renderRentals();
     }
 }
 
 // Update fecha de pago
-async function updateFechaPago(type, id, monthKey, fecha) {
+function updateFechaPago(type, id, monthKey, fecha) {
     const rental = data[type].find(r => r.id === id);
     if (rental && rental.pagos[monthKey]) {
         rental.pagos[monthKey].fecha = fecha;
-        await saveData();
+        saveData();
         renderRentals();
     }
 }
 
 // Toggle payment status
-async function togglePayment(type, id, monthKey, isPaid) {
+function togglePayment(type, id, monthKey, isPaid) {
     const rental = data[type].find(r => r.id === id);
     if (rental) {
         // Initialize payment object if it doesn't exist
@@ -271,17 +312,17 @@ async function togglePayment(type, id, monthKey, isPaid) {
             rental.pagos[monthKey].fecha = null;
         }
 
-        await saveData();
+        saveData();
         renderRentals();
     }
 }
 
 // Toggle ocupado status
-async function toggleOcupado(type, id, ocupado) {
+function toggleOcupado(type, id, ocupado) {
     const rental = data[type].find(r => r.id === id);
     if (rental) {
         rental.ocupado = ocupado;
-        await saveData();
+        saveData();
         renderRentals();
     }
 }
@@ -297,7 +338,7 @@ function updateSummary() {
         if (rental.ocupado) {
             totalEsperado += rental.renta;
         }
-        
+
         const payment = rental.pagos[currentMonth];
         if (payment && payment.pagado) {
             ingresoMes += rental.renta;
@@ -320,7 +361,7 @@ function showHistory(type, id) {
     if (!rental) return;
 
     const sortedMonths = Object.keys(rental.pagos).sort().reverse();
-    
+
     // Count paid and pending
     let totalPagados = 0;
     let totalPendientes = 0;
@@ -333,7 +374,7 @@ function showHistory(type, id) {
     });
 
     let html = `<h3 style="margin-bottom: 1rem;">${rental.inquilino}</h3>`;
-    
+
     // Add summary
     if (sortedMonths.length > 0) {
         html += `
@@ -390,12 +431,12 @@ function showHistory(type, id) {
 }
 
 // Delete payment record from history
-async function deletePaymentRecord(type, id, monthKey) {
+function deletePaymentRecord(type, id, monthKey) {
     const rental = data[type].find(r => r.id === id);
 
     if (rental && rental.pagos[monthKey]) {
         delete rental.pagos[monthKey];
-        await saveData();
+        saveData();
         showHistory(type, id); // Refresh the modal
         renderRentals(); // Refresh the main view
     }
@@ -403,8 +444,8 @@ async function deletePaymentRecord(type, id, monthKey) {
 
 // Render services
 function renderServices() {
-    const servicesContainer = document.getElementById('services-list');
-    
+    const servicesContainer = document.getElementById('servicios-list');
+
     // Get all services combined
     const allServices = [];
     for (const [tipo, services] of Object.entries(data.servicios)) {
@@ -415,10 +456,10 @@ function renderServices() {
             });
         });
     }
-    
+
     // Sort by date descending
     allServices.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
-    
+
     // Group by month
     const servicesByMonth = {};
     allServices.forEach(service => {
@@ -433,27 +474,27 @@ function renderServices() {
         }
         servicesByMonth[monthKey][service.tipo].push(service);
     });
-    
+
     // Sort months descending
     const sortedMonths = Object.keys(servicesByMonth).sort().reverse();
-    
+
     if (sortedMonths.length === 0) {
         servicesContainer.innerHTML = '<p style="color: var(--text-secondary); text-align: center;">No hay servicios registrados.</p>';
         return;
     }
-    
+
     let html = '';
-    
+
     sortedMonths.forEach(monthKey => {
         const monthName = getMonthName(monthKey);
         const monthServices = servicesByMonth[monthKey];
-        
+
         // Calculate month total
         let monthTotal = 0;
         Object.values(monthServices).forEach(services => {
             services.forEach(s => monthTotal += s.costo);
         });
-        
+
         html += `
         <div class="month-group">
           <div class="month-header">
@@ -461,18 +502,18 @@ function renderServices() {
             <span class="month-total">${formatCurrency(monthTotal)}</span>
           </div>
         `;
-        
+
         // Render each service type
         const typeIcons = { agua: '💧', luz: '⚡', internet: '🌐', otros: '📝' };
         const typeNames = { agua: 'Agua', luz: 'Luz', internet: 'Internet', otros: 'Otros' };
-        
+
         ['agua', 'luz', 'internet', 'otros'].forEach(tipo => {
             if (monthServices[tipo].length > 0) {
                 html += `
                 <div class="service-type-section">
                   <div class="service-type-header">${typeIcons[tipo]} ${typeNames[tipo]}</div>
                 `;
-                
+
                 monthServices[tipo].forEach((service, index) => {
                     const globalIndex = allServices.findIndex(s => s === service);
                     html += `
@@ -485,20 +526,20 @@ function renderServices() {
                     </div>
                     `;
                 });
-                
+
                 html += `</div>`;
             }
         });
-        
+
         html += `</div>`;
     });
-    
+
     servicesContainer.innerHTML = html;
     updateServicesSummary();
 }
 
 // Delete service
-async function deleteService(tipo, serviceIndex) {
+function deleteService(tipo, serviceIndex) {
     // Find the service in the combined array
     const allServices = [];
     for (const [t, services] of Object.entries(data.servicios)) {
@@ -510,15 +551,15 @@ async function deleteService(tipo, serviceIndex) {
             });
         });
     }
-    
+
     allServices.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
-    
+
     if (serviceIndex >= 0 && serviceIndex < allServices.length) {
         const service = allServices[serviceIndex];
         const index = service.originalIndex;
-        
+
         data.servicios[service.tipo].splice(index, 1);
-        await saveData();
+        saveData();
         renderServices();
     }
 }
@@ -542,7 +583,7 @@ function updateServicesSummary() {
 
 // Initialize tabs
 function initTabs() {
-    const tabs = document.querySelectorAll('.tab');
+    const tabs = document.querySelectorAll('.tab-btn');
     const tabContents = document.querySelectorAll('.tab-content');
 
     tabs.forEach(tab => {
@@ -553,7 +594,7 @@ function initTabs() {
             tabContents.forEach(c => c.classList.remove('active'));
 
             tab.classList.add('active');
-            document.getElementById(target).classList.add('active');
+            document.getElementById(`tab-${target}`).classList.add('active');
         });
     });
 }
@@ -579,7 +620,7 @@ function initForms() {
     const formAgua = document.getElementById('form-agua');
     const formServicio = document.getElementById('form-servicio');
 
-    formAgua.addEventListener('submit', async (e) => {
+    formAgua.addEventListener('submit', (e) => {
         e.preventDefault();
 
         const fecha = document.getElementById('agua-fecha').value;
@@ -587,7 +628,7 @@ function initForms() {
         const costo = parseFloat(document.getElementById('agua-costo').value);
 
         data.servicios.agua.push({ fecha, cantidad, costo });
-        await saveData();
+        saveData();
 
         renderServices();
         formAgua.reset();
@@ -596,7 +637,7 @@ function initForms() {
         document.getElementById('agua-fecha').valueAsDate = new Date();
     });
 
-    formServicio.addEventListener('submit', async (e) => {
+    formServicio.addEventListener('submit', (e) => {
         e.preventDefault();
 
         const tipo = document.getElementById('servicio-tipo').value;
@@ -605,7 +646,7 @@ function initForms() {
         const notas = document.getElementById('servicio-notas').value;
 
         data.servicios[tipo].push({ fecha, costo, notas });
-        await saveData();
+        saveData();
 
         renderServices();
         formServicio.reset();
@@ -620,15 +661,15 @@ function initForms() {
 }
 
 // Initialize app
-document.addEventListener('DOMContentLoaded', async () => {
-    // Initialize data from Supabase (falls back to localStorage if needed)
-    await initializeDataWithSupabase();
-    
+document.addEventListener('DOMContentLoaded', () => {
+    // Initialize data from localStorage
+    initializeData();
+
     // Initialize UI
     initTabs();
     initModal();
     initForms();
-    
+
     // Render everything
     renderRentals();
     renderServices();
