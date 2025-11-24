@@ -10,46 +10,8 @@ let data = {
     }
 };
 
-// Initialize data
-function initializeData() {
-    const savedData = localStorage.getItem('rentasData');
-
-    if (savedData) {
-        data = JSON.parse(savedData);
-        // Add ocupado field to existing data if it doesn't exist
-        data.cuartos.forEach(c => {
-            if (c.ocupado === undefined) c.ocupado = true;
-        });
-        data.departamentos.forEach(d => {
-            if (d.ocupado === undefined) d.ocupado = true;
-        });
-    } else {
-        // Create default data for 4 rooms and 4 apartments
-        for (let i = 1; i <= 4; i++) {
-            data.cuartos.push({
-                id: i,
-                inquilino: `Cuarto ${i}`,
-                renta: 1500,
-                ocupado: true,
-                pagos: {}
-            });
-
-            data.departamentos.push({
-                id: i,
-                inquilino: `Departamento ${i}`,
-                renta: 4500,
-                ocupado: true,
-                pagos: {}
-            });
-        }
-        saveData();
-    }
-}
-
-// Save data to localStorage
-function saveData() {
-    localStorage.setItem('rentasData', JSON.stringify(data));
-}
+// NOTE: initializeData() and saveData() are now in supabase-sync.js
+// We removed the local versions to use the cloud-sync versions
 
 // Get current month key (YYYY-MM format)
 function getCurrentMonthKey() {
@@ -63,6 +25,28 @@ function getMonthName(monthKey) {
         'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
     const [year, month] = monthKey.split('-');
     return `${months[parseInt(month) - 1]} ${year}`;
+}
+
+// Generate month options for selector (last 6 months + next 3 months)
+function generateMonthOptions() {
+    const options = [];
+    const now = new Date();
+    
+    // Generate options for last 6 months
+    for (let i = 6; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        options.push({ key, name: getMonthName(key) });
+    }
+    
+    // Generate options for next 3 months
+    for (let i = 1; i <= 3; i++) {
+        const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        options.push({ key, name: getMonthName(key) });
+    }
+    
+    return options;
 }
 
 // Format currency
@@ -88,7 +72,7 @@ function renderRentals() {
 // Render monthly revenue history
 function renderMonthlyRevenue() {
     const container = document.getElementById('monthly-revenue-list');
-
+    
     // Get all unique months from payment history
     const monthsSet = new Set();
     [...data.cuartos, ...data.departamentos].forEach(rental => {
@@ -96,38 +80,38 @@ function renderMonthlyRevenue() {
             monthsSet.add(month);
         });
     });
-
+    
     // Sort months descending (most recent first)
     const months = Array.from(monthsSet).sort().reverse();
-
+    
     if (months.length === 0) {
         container.innerHTML = '<p style="color: var(--text-secondary); text-align: center;">No hay historial de recaudación aún.</p>';
         return;
     }
-
+    
     let html = '<div class="revenue-history-grid">';
-
+    
     months.forEach(monthKey => {
         const monthName = getMonthName(monthKey);
         let metaMes = 0;
         let recaudado = 0;
-
+        
         // Calculate meta and collected for this month
         [...data.cuartos, ...data.departamentos].forEach(rental => {
-            // Note: We use current ocupado status as proxy (ideally we'd track historical ocupado)
+            // Note: We use current ocupado status as proxy
             if (rental.ocupado) {
                 metaMes += rental.renta;
             }
-
+            
             const payment = rental.pagos[monthKey];
             if (payment && payment.pagado) {
                 recaudado += rental.renta;
             }
         });
-
+        
         const pendiente = metaMes - recaudado;
         const porcentaje = metaMes > 0 ? ((recaudado / metaMes) * 100).toFixed(0) : 0;
-
+        
         html += `
         <div class="revenue-month-card">
           <div class="revenue-month-header">
@@ -154,7 +138,7 @@ function renderMonthlyRevenue() {
         </div>
         `;
     });
-
+    
     html += '</div>';
     container.innerHTML = html;
 }
@@ -162,12 +146,15 @@ function renderMonthlyRevenue() {
 function renderRentalSection(type, rentals, containerId) {
     const container = document.getElementById(containerId);
     const currentMonth = getCurrentMonthKey();
+    const monthOptions = generateMonthOptions();
 
     container.innerHTML = rentals.map(rental => {
-        const payment = rental.pagos[currentMonth] || { pagado: false, fecha: null, notas: '' };
+        // Get selected month from data attribute or use current month
+        const selectedMonth = rental.selectedMonth || currentMonth;
+        const payment = rental.pagos[selectedMonth] || { pagado: false, fecha: null };
 
         return `
-      <div class="rental-card ${!rental.ocupado ? 'desocupado' : ''}">
+      <div class="rental-card ${!rental.ocupado ? 'desocupado' : ''}" data-type="${type}" data-id="${rental.id}">
         <div class="rental-header">
           <div class="rental-title">${type === 'cuartos' ? '🚪' : '🏠'} ${rental.inquilino}</div>
           <div class="rental-price">${formatCurrency(rental.renta)}</div>
@@ -192,21 +179,32 @@ function renderRentalSection(type, rentals, containerId) {
           </div>
           
           <div class="input-group">
+            <label>Seleccionar Mes</label>
+            <select onchange="selectMonth('${type}', ${rental.id}, this.value)">
+              ${monthOptions.map(opt => `
+                <option value="${opt.key}" ${opt.key === selectedMonth ? 'selected' : ''}>
+                  ${opt.name}
+                </option>
+              `).join('')}
+            </select>
+          </div>
+          
+          <div class="input-group">
             <label>Fecha de Pago</label>
             <input type="date" 
                    value="${payment.fecha || ''}" 
-                   onchange="updateFechaPago('${type}', ${rental.id}, this.value)"
+                   onchange="updateFechaPago('${type}', ${rental.id}, '${selectedMonth}', this.value)"
                    ${!payment.pagado ? 'disabled' : ''}>
           </div>
         </div>
         
         <div class="payment-status">
           <button class="status-btn paid ${payment.pagado ? 'active' : ''}" 
-                  onclick="togglePayment('${type}', ${rental.id}, true)">
+                  onclick="togglePayment('${type}', ${rental.id}, '${selectedMonth}', true)">
             ✓ Pagado
           </button>
           <button class="status-btn pending ${!payment.pagado ? 'active' : ''}" 
-                  onclick="togglePayment('${type}', ${rental.id}, false)">
+                  onclick="togglePayment('${type}', ${rental.id}, '${selectedMonth}', false)">
             ⏱ Pendiente
           </button>
         </div>
@@ -221,76 +219,69 @@ function renderRentalSection(type, rentals, containerId) {
     }).join('');
 }
 
-// Toggle ocupado status
-function toggleOcupado(type, id, ocupado) {
+// Select month for payment
+function selectMonth(type, id, monthKey) {
     const rental = data[type].find(r => r.id === id);
     if (rental) {
-        rental.ocupado = ocupado;
-        saveData();
+        rental.selectedMonth = monthKey;
         renderRentals();
     }
 }
 
 // Update inquilino name
-function updateInquilino(type, id, value) {
+async function updateInquilino(type, id, value) {
     const rental = data[type].find(r => r.id === id);
     if (rental) {
         rental.inquilino = value;
-        saveData();
+        await saveData();
+        renderRentals();
     }
 }
 
-// Update payment notes
-function updateNotas(type, id, value) {
+// Update fecha de pago
+async function updateFechaPago(type, id, monthKey, fecha) {
     const rental = data[type].find(r => r.id === id);
-    const currentMonth = getCurrentMonthKey();
-
-    if (rental) {
-        if (!rental.pagos[currentMonth]) {
-            rental.pagos[currentMonth] = { pagado: false, fecha: null, notas: '' };
-        }
-        rental.pagos[currentMonth].notas = value;
-        saveData();
-    }
-}
-
-// Update payment date
-function updateFechaPago(type, id, value) {
-    const rental = data[type].find(r => r.id === id);
-    const currentMonth = getCurrentMonthKey();
-
-    if (rental) {
-        if (!rental.pagos[currentMonth]) {
-            rental.pagos[currentMonth] = { pagado: false, fecha: null, notas: '' };
-        }
-        rental.pagos[currentMonth].fecha = value;
-        saveData();
+    if (rental && rental.pagos[monthKey]) {
+        rental.pagos[monthKey].fecha = fecha;
+        await saveData();
         renderRentals();
     }
 }
 
 // Toggle payment status
-function togglePayment(type, id, isPaid) {
+async function togglePayment(type, id, monthKey, isPaid) {
     const rental = data[type].find(r => r.id === id);
-    const currentMonth = getCurrentMonthKey();
-
     if (rental) {
-        if (!rental.pagos[currentMonth]) {
-            rental.pagos[currentMonth] = { pagado: false, fecha: null, notas: '' };
+        // Initialize payment object if it doesn't exist
+        if (!rental.pagos[monthKey]) {
+            rental.pagos[monthKey] = {
+                pagado: false,
+                fecha: null
+            };
         }
 
-        rental.pagos[currentMonth].pagado = isPaid;
+        rental.pagos[monthKey].pagado = isPaid;
 
         // Only set date to today if marking as paid AND there's no existing date
-        if (isPaid && !rental.pagos[currentMonth].fecha) {
-            rental.pagos[currentMonth].fecha = new Date().toISOString().split('T')[0];
+        if (isPaid && !rental.pagos[monthKey].fecha) {
+            rental.pagos[monthKey].fecha = new Date().toISOString().split('T')[0];
         }
         // Clear date if marking as pending
         if (!isPaid) {
-            rental.pagos[currentMonth].fecha = null;
+            rental.pagos[monthKey].fecha = null;
         }
 
-        saveData();
+        await saveData();
+        renderRentals();
+    }
+}
+
+// Toggle ocupado status
+async function toggleOcupado(type, id, ocupado) {
+    const rental = data[type].find(r => r.id === id);
+    if (rental) {
+        rental.ocupado = ocupado;
+        await saveData();
         renderRentals();
     }
 }
@@ -306,7 +297,7 @@ function updateSummary() {
         if (rental.ocupado) {
             totalEsperado += rental.renta;
         }
-
+        
         const payment = rental.pagos[currentMonth];
         if (payment && payment.pagado) {
             ingresoMes += rental.renta;
@@ -329,7 +320,7 @@ function showHistory(type, id) {
     if (!rental) return;
 
     const sortedMonths = Object.keys(rental.pagos).sort().reverse();
-
+    
     // Count paid and pending
     let totalPagados = 0;
     let totalPendientes = 0;
@@ -342,7 +333,7 @@ function showHistory(type, id) {
     });
 
     let html = `<h3 style="margin-bottom: 1rem;">${rental.inquilino}</h3>`;
-
+    
     // Add summary
     if (sortedMonths.length > 0) {
         html += `
@@ -399,47 +390,39 @@ function showHistory(type, id) {
 }
 
 // Delete payment record from history
-function deletePaymentRecord(type, id, monthKey) {
+async function deletePaymentRecord(type, id, monthKey) {
     const rental = data[type].find(r => r.id === id);
 
     if (rental && rental.pagos[monthKey]) {
         delete rental.pagos[monthKey];
-        saveData();
+        await saveData();
         showHistory(type, id); // Refresh the modal
         renderRentals(); // Refresh the main view
     }
 }
 
-// Services functions
+// Render services
 function renderServices() {
-    const container = document.getElementById('servicios-list');
-
-    // Get ALL services
-    let allServices = [];
-
-    Object.keys(data.servicios).forEach(tipo => {
-        data.servicios[tipo].forEach((servicio, index) => {
-            if (servicio.fecha) {
-                allServices.push({
-                    ...servicio,
-                    tipo,
-                    index
-                });
-            }
+    const servicesContainer = document.getElementById('services-list');
+    
+    // Get all services combined
+    const allServices = [];
+    for (const [tipo, services] of Object.entries(data.servicios)) {
+        services.forEach(service => {
+            allServices.push({
+                ...service,
+                tipo: tipo
+            });
         });
-    });
-
-    if (allServices.length === 0) {
-        container.innerHTML = '<p style="color: var(--text-secondary);">No hay registros.</p>';
-        updateServicesSummary();
-        return;
     }
-
-    // Group services by month
+    
+    // Sort by date descending
+    allServices.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+    
+    // Group by month
     const servicesByMonth = {};
-    allServices.forEach(servicio => {
-        const [year, month] = servicio.fecha.split('-');
-        const monthKey = `${year}-${month}`;
+    allServices.forEach(service => {
+        const monthKey = service.fecha.substring(0, 7); // YYYY-MM
         if (!servicesByMonth[monthKey]) {
             servicesByMonth[monthKey] = {
                 agua: [],
@@ -448,120 +431,106 @@ function renderServices() {
                 otros: []
             };
         }
-        servicesByMonth[monthKey][servicio.tipo].push(servicio);
+        servicesByMonth[monthKey][service.tipo].push(service);
     });
-
-    // Sort months descending (most recent first)
+    
+    // Sort months descending
     const sortedMonths = Object.keys(servicesByMonth).sort().reverse();
-
-    const icons = {
-        agua: '💧',
-        luz: '⚡',
-        internet: '🌐',
-        otros: '📝'
-    };
-
-    const typeNames = {
-        agua: 'Agua',
-        luz: 'Luz',
-        internet: 'Internet',
-        otros: 'Otros'
-    };
-
-    // Build HTML grouped by month
+    
+    if (sortedMonths.length === 0) {
+        servicesContainer.innerHTML = '<p style="color: var(--text-secondary); text-align: center;">No hay servicios registrados.</p>';
+        return;
+    }
+    
     let html = '';
-
+    
     sortedMonths.forEach(monthKey => {
         const monthName = getMonthName(monthKey);
         const monthServices = servicesByMonth[monthKey];
-
+        
         // Calculate month total
         let monthTotal = 0;
-        Object.keys(monthServices).forEach(tipo => {
-            monthServices[tipo].forEach(s => monthTotal += s.costo);
+        Object.values(monthServices).forEach(services => {
+            services.forEach(s => monthTotal += s.costo);
         });
-
+        
         html += `
         <div class="month-group">
           <div class="month-header">
-            <h3>📅 ${monthName}</h3>
-            <div class="month-total">${formatCurrency(monthTotal)}</div>
+            <span>📅 ${monthName}</span>
+            <span class="month-total">${formatCurrency(monthTotal)}</span>
           </div>
-          <div class="services-by-type">
         `;
-
-        // Show each service type
+        
+        // Render each service type
+        const typeIcons = { agua: '💧', luz: '⚡', internet: '🌐', otros: '📝' };
+        const typeNames = { agua: 'Agua', luz: 'Luz', internet: 'Internet', otros: 'Otros' };
+        
         ['agua', 'luz', 'internet', 'otros'].forEach(tipo => {
-            const services = monthServices[tipo];
-            if (services.length > 0) {
+            if (monthServices[tipo].length > 0) {
                 html += `
                 <div class="service-type-section">
-                  <div class="service-type-header">
-                    ${icons[tipo]} <strong>${typeNames[tipo]}</strong>
-                  </div>
+                  <div class="service-type-header">${typeIcons[tipo]} ${typeNames[tipo]}</div>
                 `;
-
-                services.forEach(servicio => {
+                
+                monthServices[tipo].forEach((service, index) => {
+                    const globalIndex = allServices.findIndex(s => s === service);
                     html += `
                     <div class="service-item-compact">
-                      <div class="service-item-details">
-                        <div>${formatDate(servicio.fecha)}</div>
-                        ${servicio.cantidad ? `<div class="service-quantity">${servicio.cantidad.toLocaleString()} L</div>` : ''}
-                        ${servicio.notas ? `<div class="service-notes">${servicio.notas}</div>` : ''}
-                      </div>
-                      <div class="service-item-actions">
-                        <div class="service-cost">${formatCurrency(servicio.costo)}</div>
-                        <button onclick="deleteService('${servicio.tipo}', ${servicio.index})" 
-                                class="btn-delete-history"
-                                title="Eliminar registro">
-                          ✕
-                        </button>
-                      </div>
+                      <span class="service-date">${formatDate(service.fecha)}</span>
+                      ${tipo === 'agua' ? `<span class="service-quantity">${service.cantidad?.toLocaleString()} L</span>` : ''}
+                      ${service.notas && tipo !== 'agua' ? `<span class="service-notes">${service.notas}</span>` : ''}
+                      <span class="service-cost">${formatCurrency(service.costo)}</span>
+                      <button class="btn-delete-service" onclick="deleteService('${tipo}', ${globalIndex})" title="Eliminar">✕</button>
                     </div>
                     `;
                 });
-
+                
                 html += `</div>`;
             }
         });
-
-        html += `
-          </div>
-        </div>
-        `;
+        
+        html += `</div>`;
     });
-
-    container.innerHTML = html;
+    
+    servicesContainer.innerHTML = html;
     updateServicesSummary();
 }
 
-// Delete service record
-function deleteService(tipo, index) {
-    if (data.servicios[tipo] && data.servicios[tipo][index]) {
-        data.servicios[tipo].splice(index, 1);
-        saveData();
+// Delete service
+async function deleteService(tipo, serviceIndex) {
+    // Find the service in the combined array
+    const allServices = [];
+    for (const [t, services] of Object.entries(data.servicios)) {
+        services.forEach(service => {
+            allServices.push({
+                ...service,
+                tipo: t,
+                originalIndex: data.servicios[t].indexOf(service)
+            });
+        });
+    }
+    
+    allServices.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+    
+    if (serviceIndex >= 0 && serviceIndex < allServices.length) {
+        const service = allServices[serviceIndex];
+        const index = service.originalIndex;
+        
+        data.servicios[service.tipo].splice(index, 1);
+        await saveData();
         renderServices();
     }
 }
 
+// Update services summary
 function updateServicesSummary() {
     let totalAgua = 0;
     let totalServicios = 0;
 
-    // Calculate water total (ALL records)
-    data.servicios.agua.forEach(servicio => {
-        if (servicio.fecha) {
-            totalAgua += servicio.costo;
-        }
-    });
-
-    // Calculate other services total (ALL records)
+    data.servicios.agua.forEach(s => totalAgua += s.costo);
     ['luz', 'internet', 'otros'].forEach(tipo => {
-        data.servicios[tipo].forEach(servicio => {
-            if (servicio.fecha) {
-                totalServicios += servicio.costo;
-            }
-        });
+        data.servicios[tipo].forEach(s => totalServicios += s.costo);
     });
 
     const totalGastos = totalAgua + totalServicios;
@@ -571,26 +540,25 @@ function updateServicesSummary() {
     document.getElementById('total-gastos').textContent = formatCurrency(totalGastos);
 }
 
-// Tab navigation
+// Initialize tabs
 function initTabs() {
-    const tabButtons = document.querySelectorAll('.tab-btn');
+    const tabs = document.querySelectorAll('.tab');
     const tabContents = document.querySelectorAll('.tab-content');
 
-    tabButtons.forEach(button => {
-        button.addEventListener('click', () => {
-            const tabName = button.dataset.tab;
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            const target = tab.dataset.tab;
 
-            // Update active states
-            tabButtons.forEach(btn => btn.classList.remove('active'));
-            tabContents.forEach(content => content.classList.remove('active'));
+            tabs.forEach(t => t.classList.remove('active'));
+            tabContents.forEach(c => c.classList.remove('active'));
 
-            button.classList.add('active');
-            document.getElementById(`tab-${tabName}`).classList.add('active');
+            tab.classList.add('active');
+            document.getElementById(target).classList.add('active');
         });
     });
 }
 
-// Modal controls
+// Initialize modal
 function initModal() {
     const modal = document.getElementById('modal-historial');
     const closeBtn = modal.querySelector('.close-modal');
@@ -606,19 +574,21 @@ function initModal() {
     });
 }
 
-// Form handlers
+// Initialize forms
 function initForms() {
-    // Water form
     const formAgua = document.getElementById('form-agua');
-    formAgua.addEventListener('submit', (e) => {
+    const formServicio = document.getElementById('form-servicio');
+
+    formAgua.addEventListener('submit', async (e) => {
         e.preventDefault();
 
         const fecha = document.getElementById('agua-fecha').value;
-        const cantidad = parseFloat(document.getElementById('agua-cantidad').value);
+        const cantidad = parseInt(document.getElementById('agua-cantidad').value);
         const costo = parseFloat(document.getElementById('agua-costo').value);
 
         data.servicios.agua.push({ fecha, cantidad, costo });
-        saveData();
+        await saveData();
+
         renderServices();
         formAgua.reset();
 
@@ -626,9 +596,7 @@ function initForms() {
         document.getElementById('agua-fecha').valueAsDate = new Date();
     });
 
-    // Service form
-    const formServicio = document.getElementById('form-servicio');
-    formServicio.addEventListener('submit', (e) => {
+    formServicio.addEventListener('submit', async (e) => {
         e.preventDefault();
 
         const tipo = document.getElementById('servicio-tipo').value;
@@ -637,7 +605,8 @@ function initForms() {
         const notas = document.getElementById('servicio-notas').value;
 
         data.servicios[tipo].push({ fecha, costo, notas });
-        saveData();
+        await saveData();
+
         renderServices();
         formServicio.reset();
 
@@ -654,12 +623,12 @@ function initForms() {
 document.addEventListener('DOMContentLoaded', async () => {
     // Initialize data from Supabase (falls back to localStorage if needed)
     await initializeDataWithSupabase();
-
+    
     // Initialize UI
     initTabs();
     initModal();
     initForms();
-
+    
     // Render everything
     renderRentals();
     renderServices();
