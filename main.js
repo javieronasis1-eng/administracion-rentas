@@ -193,6 +193,7 @@ function renderRentalSection(type, rentals, containerId) {
         // Get selected month from data attribute or use current month
         const selectedMonth = rental.selectedMonth || currentMonth;
         const payment = rental.pagos[selectedMonth] || { pagado: false, fecha: null };
+        const isPaid = payment.pagado === true;
 
         return `
       <div class="rental-card ${!rental.ocupado ? 'desocupado' : ''}" data-type="${type}" data-id="${rental.id}">
@@ -235,22 +236,22 @@ function renderRentalSection(type, rentals, containerId) {
             <input type="date" 
                    value="${payment.fecha || ''}" 
                    onchange="updateFechaPago('${type}', ${rental.id}, '${selectedMonth}', this.value)"
-                   ${!payment.pagado ? 'disabled' : ''}>
+                   ${!isPaid ? 'disabled' : ''}>
           </div>
         </div>
         
         <div class="payment-status">
-          <button class="status-btn paid ${payment.pagado ? 'active' : ''}" 
+          <button class="status-btn paid ${isPaid ? 'active' : ''}" 
                   onclick="togglePayment('${type}', ${rental.id}, '${selectedMonth}', true)">
             ✓ Pagado
           </button>
-          <button class="status-btn pending ${!payment.pagado ? 'active' : ''}" 
+          <button class="status-btn pending ${!isPaid ? 'active' : ''}" 
                   onclick="togglePayment('${type}', ${rental.id}, '${selectedMonth}', false)">
             ⏱ Pendiente
           </button>
         </div>
 
-        ${payment.pagado ? `
+        ${isPaid ? `
         <button class="btn btn-primary btn-block btn-small" 
                 onclick="generateReceipt('${type}', ${rental.id}, '${selectedMonth}')" 
                 style="margin-top: 0.5rem; background-color: var(--primary); color: white;">
@@ -269,77 +270,101 @@ function renderRentalSection(type, rentals, containerId) {
 }
 
 // Generate PDF Receipt
+// Generate PDF Receipt
 function generateReceipt(type, id, monthKey) {
-    const rental = data[type].find(r => r.id === id);
-    if (!rental) return;
+    try {
+        const rental = data[type].find(r => r.id === id);
+        if (!rental) {
+            alert('Error: No se encontró la propiedad.');
+            return;
+        }
 
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
-    const payment = rental.pagos[monthKey];
-    const monthName = getMonthName(monthKey);
-    const datePaid = payment.fecha ? formatDate(payment.fecha) : 'Fecha no registrada';
+        if (!window.jspdf) {
+            alert('Error: La librería PDF no se cargó correctamente. Recarga la página.');
+            return;
+        }
 
-    // Header
-    doc.setFillColor(41, 128, 185); // Blue color
-    doc.rect(0, 0, 210, 40, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(22);
-    doc.text('RECIBO DE RENTA', 105, 25, { align: 'center' });
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
 
-    // Content
-    doc.setTextColor(0, 0, 0);
-    doc.setFontSize(12);
+        // Ensure payment exists
+        if (!rental.pagos || !rental.pagos[monthKey]) {
+            alert('Error: No hay registro de pago para este mes.');
+            return;
+        }
 
-    let y = 60;
-    const lineHeight = 12;
+        const payment = rental.pagos[monthKey];
+        const monthName = getMonthName(monthKey);
+        const datePaid = payment.fecha ? formatDate(payment.fecha) : 'Fecha no registrada';
 
-    // Details
-    doc.setFont('helvetica', 'bold');
-    doc.text('Fecha de Emisión:', 20, y);
-    doc.setFont('helvetica', 'normal');
-    doc.text(new Date().toLocaleDateString('es-MX'), 80, y);
-    y += lineHeight;
+        // Header
+        doc.setFillColor(41, 128, 185); // Blue color
+        doc.rect(0, 0, 210, 40, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(22);
+        doc.text('RECIBO DE RENTA', 105, 25, { align: 'center' });
 
-    doc.setFont('helvetica', 'bold');
-    doc.text('Inquilino:', 20, y);
-    doc.setFont('helvetica', 'normal');
-    doc.text(rental.inquilino, 80, y);
-    y += lineHeight;
+        // Content
+        doc.setTextColor(0, 0, 0);
+        doc.setFontSize(12);
 
-    doc.setFont('helvetica', 'bold');
-    doc.text('Propiedad:', 20, y);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`${type === 'cuartos' ? 'Cuarto' : 'Departamento'} #${rental.id}`, 80, y);
-    y += lineHeight;
+        let y = 60;
+        const lineHeight = 12;
 
-    doc.setFont('helvetica', 'bold');
-    doc.text('Mes Pagado:', 20, y);
-    doc.setFont('helvetica', 'normal');
-    doc.text(monthName, 80, y);
-    y += lineHeight;
+        // Details
+        doc.setFont('helvetica', 'bold');
+        doc.text('Fecha de Emisión:', 20, y);
+        doc.setFont('helvetica', 'normal');
+        doc.text(new Date().toLocaleDateString('es-MX'), 80, y);
+        y += lineHeight;
 
-    doc.setFont('helvetica', 'bold');
-    doc.text('Fecha de Pago:', 20, y);
-    doc.setFont('helvetica', 'normal');
-    doc.text(datePaid, 80, y);
-    y += lineHeight * 2;
+        doc.setFont('helvetica', 'bold');
+        doc.text('Inquilino:', 20, y);
+        doc.setFont('helvetica', 'normal');
+        doc.text(rental.inquilino, 80, y);
+        y += lineHeight;
 
-    // Amount Box
-    doc.setFillColor(240, 240, 240);
-    doc.rect(20, y - 8, 170, 20, 'F');
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(16);
-    doc.text('MONTO PAGADO:', 30, y + 5);
-    doc.setTextColor(39, 174, 96); // Green color
-    doc.text(formatCurrency(rental.renta), 150, y + 5);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Propiedad:', 20, y);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`${type === 'cuartos' ? 'Cuarto' : 'Departamento'} #${rental.id}`, 80, y);
+        y += lineHeight;
 
-    // Footer
-    doc.setTextColor(100, 100, 100);
-    doc.setFontSize(10);
-    doc.text('Este recibo es un comprobante digital de pago.', 105, 280, { align: 'center' });
+        doc.setFont('helvetica', 'bold');
+        doc.text('Mes Pagado:', 20, y);
+        doc.setFont('helvetica', 'normal');
+        doc.text(monthName, 80, y);
+        y += lineHeight;
 
-    // Save
-    doc.save(`Recibo_${rental.inquilino.replace(/\s+/g, '_')}_${monthKey}.pdf`);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Fecha de Pago:', 20, y);
+        doc.setFont('helvetica', 'normal');
+        doc.text(datePaid, 80, y);
+        y += lineHeight * 2;
+
+        // Amount Box
+        doc.setFillColor(240, 240, 240);
+        doc.rect(20, y - 8, 170, 20, 'F');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(16);
+        doc.text('MONTO PAGADO:', 30, y + 5);
+        doc.setTextColor(39, 174, 96); // Green color
+        doc.text(formatCurrency(rental.renta), 150, y + 5);
+
+        // Footer
+        doc.setTextColor(100, 100, 100);
+        doc.setFontSize(10);
+        doc.text('Este recibo es un comprobante digital de pago.', 105, 280, { align: 'center' });
+
+        // Save
+        const fileName = `Recibo_${rental.inquilino.replace(/\s+/g, '_')}_${monthKey}.pdf`;
+        doc.save(fileName);
+        console.log('PDF generado:', fileName);
+
+    } catch (error) {
+        console.error('Error generando PDF:', error);
+        alert('Hubo un error al generar el PDF. Revisa la consola para más detalles.');
+    }
 }
 
 // Select month for payment
