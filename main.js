@@ -438,7 +438,7 @@ function renderServices() {
     const sortedMonths = Object.keys(servicesByMonth).sort().reverse();
     
     if (sortedMonths.length === 0) {
-        services Container.innerHTML = '<p style="color: var(--text-secondary); text-align: center;">No hay servicios registrados.</p>';
+        servicesContainer.innerHTML = '<p style="color: var(--text-secondary); text-align: center;">No hay servicios registrados.</p>';
         return;
     }
     
